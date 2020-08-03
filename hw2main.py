@@ -103,6 +103,9 @@ def main():
                 # Convert network output to integer values.
                 outputs = student.convertNetOutput(net(inputs, length)).flatten()
 
+                print(labels)
+                print(outputs)
+
                 for i in range(5):
                     closeness[i] += torch.sum(abs(labels - outputs) == i).item()
 

@@ -24,7 +24,7 @@ import torch.optim as toptim
 from torchtext.vocab import GloVe
 import torch.nn.functional as F
 import re
-# import numpy as np
+import numpy as np
 # import sklearn
 
 ###########################################################################
@@ -32,24 +32,47 @@ import re
 ###########################################################################
 
 def preprocessing(sample):
+    """
+    Called after tokenising but before numericalising.
+    """
     review = " ".join(sample)
     #print(review)
     review = re.sub(r"</?\w+[^>]*>", '', review)
     review = re.sub(r"[^a-zA-Z']", ' ', review)
     final = review.split()
     final = [i for i in final if len(i) > 1]
-    print(final)
-    """
-    Called after tokenising but before numericalising.
-    """
+    #print (final)
 
-    return sample
+    return final
 
 def postprocessing(batch, vocab):
     """
     Called after numericalisation but before vectorisation.
     """
-
+    #batch is a list of numbers? representing each unique word
+    #print(batch)
+    #print(batch)
+    # print(vocab.freqs.most_common(200))
+    # temp_words = []
+    # for word in vocab.freqs:
+    #     if (vocab.freqs[word] > 400):
+    #         #print(word, ": ", vocab.freqs[word])
+    #         temp_words.append(word)
+    #
+    # temp_numerical = []
+    # for i in temp_words:
+    #     #print(vocab.stoi[i])
+    #     temp_numerical.append(vocab.stoi[i])
+    #
+    # #print(final_list)
+    # final_list = []
+    # #print(temp_numerical)
+    # #final_list = [i for i in batch if i not in temp_numerical]
+    # for curr in batch:
+    #     temp_list = [i for i in curr if i in temp_numerical]
+    #     final_list.append(temp_list)
+    # print(final_list)
+    # print(batch)
     return batch
 
 stopWords = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself',
@@ -78,7 +101,8 @@ def convertLabel(datasetLabel):
     to convert them to another representation in this function.
     Consider regression vs classification.
     """
-    print("convertLabel: ", datasetLabel)
+    datasetLabel = torch.true_divide(datasetLabel,5)
+    #print("convertLabel: ", datasetLabel)
     return datasetLabel
 
 def convertNetOutput(netOutput):
@@ -89,7 +113,10 @@ def convertNetOutput(netOutput):
     If your network outputs a different representation or any float
     values other than the five mentioned, convert the output here.
     """
-    print("convertNetOutput: ", netOutput)
+    #print("convertNetOutput: ", netOutput)
+    #print(netOutput)
+    #print(netOutput.flatten())
+    # return torch.sigmoid(netOutput)
     return netOutput
 
 ###########################################################################
@@ -115,7 +142,7 @@ class network(tnn.Module):
             batch_first=True,
             bias=True,
             dropout=self.dropout_prob,
-            num_layers=2,
+            num_layers=4,
             bidirectional=True)
         self.fc = tnn.Linear(
             in_features=self.hidden_dim*2,
@@ -125,8 +152,10 @@ class network(tnn.Module):
     def forward(self, input, length):
         batchSize, _, _ = input.size()
         lstm_out, (hn, cn) = self.lstm(input)
+        #print("length: ", length)
         hidden = self.dropout(torch.cat((hn[-2,:,:], hn[-1,:,:]), dim=1))
         out = self.fc(hidden.squeeze(0)).view(batchSize, -1)[:, -1]
+        #print("output: ", out)
         return out
 
 # class loss(tnn.Module):
@@ -141,7 +170,7 @@ class network(tnn.Module):
 #     def forward(self, output, target):
 #         pass
 
-lossFunc = tnn.BCEWithLogitsLoss()
+lossFunc = tnn.MSELoss()
 
 net = network()
 """
@@ -156,4 +185,4 @@ net = network()
 trainValSplit = 0.8
 batchSize = 32
 epochs = 3
-optimiser = toptim.SGD(net.parameters(), lr=0.01)
+optimiser = toptim.Adam(net.parameters(), lr=0.001)
