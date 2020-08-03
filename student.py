@@ -32,6 +32,13 @@ import re
 ###########################################################################
 
 def preprocessing(sample):
+    review = " ".join(sample)
+    #print(review)
+    review = re.sub(r"</?\w+[^>]*>", '', review)
+    review = re.sub(r"[^a-zA-Z']", ' ', review)
+    final = review.split()
+    final = [i for i in final if len(i) > 1]
+    print(final)
     """
     Called after tokenising but before numericalising.
     """
