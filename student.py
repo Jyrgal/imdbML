@@ -101,7 +101,7 @@ def convertLabel(datasetLabel):
     to convert them to another representation in this function.
     Consider regression vs classification.
     """
-    datasetLabel = torch.true_divide(datasetLabel,5)
+    #datasetLabel = torch.true_divide(datasetLabel,5)
     #print("convertLabel: ", datasetLabel)
     return datasetLabel
 
@@ -117,6 +117,7 @@ def convertNetOutput(netOutput):
     #print(netOutput)
     #print(netOutput.flatten())
     # return torch.sigmoid(netOutput)
+    netOutput = torch.ceil(netOutput)
     return netOutput
 
 ###########################################################################
