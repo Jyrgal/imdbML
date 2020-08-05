@@ -68,6 +68,8 @@ def main():
 
             # Forward pass through the network.
             output = net(inputs, length)
+            #print(labels)
+            #print(output)
             loss = criterion(output, student.convertLabel(labels))
 
             # Calculate gradients.
@@ -104,7 +106,7 @@ def main():
                 outputs = student.convertNetOutput(net(inputs, length)).flatten()
 
                 print(labels)
-                print(outputs)
+                #print(outputs)
 
                 for i in range(5):
                     closeness[i] += torch.sum(abs(labels - outputs) == i).item()

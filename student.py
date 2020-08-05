@@ -37,6 +37,7 @@ def preprocessing(sample):
     """
     review = " ".join(sample)
     #print(review)
+    review = review.replace('\'', '')
     review = re.sub(r"</?\w+[^>]*>", '', review)
     review = re.sub(r"[^a-zA-Z']", ' ', review)
     final = review.split()
@@ -103,6 +104,8 @@ def convertLabel(datasetLabel):
     """
     #datasetLabel = torch.true_divide(datasetLabel,5)
     #print("convertLabel: ", datasetLabel)
+    #print(F.one_hot(datasetLabel.to(torch.int64)), datasetLabel)
+    #return F.one_hot(datasetLabel.to(torch.int64))
     return datasetLabel
 
 def convertNetOutput(netOutput):
@@ -117,6 +120,7 @@ def convertNetOutput(netOutput):
     #print(netOutput)
     #print(netOutput.flatten())
     # return torch.sigmoid(netOutput)
+    print(netOutput)
     netOutput = torch.ceil(netOutput)
     return netOutput
 
@@ -137,6 +141,7 @@ class network(tnn.Module):
         self.dropout_prob = 0.5
         self.input_dim = 50
         self.hidden_dim = 170
+        self.hidden_dim_linear = 200
         self.lstm = tnn.LSTM(
             input_size=self.input_dim,
             hidden_size=self.hidden_dim,
@@ -145,33 +150,47 @@ class network(tnn.Module):
             dropout=self.dropout_prob,
             num_layers=4,
             bidirectional=True)
-        self.fc = tnn.Linear(
-            in_features=self.hidden_dim*2,
-            out_features=1)
+
+        self.fc = tnn.Sequential(
+            tnn.Linear(self.hidden_dim*2, self.hidden_dim_linear),
+            tnn.BatchNorm1d(self.hidden_dim_linear),
+            tnn.ReLU(inplace=True),
+            tnn.Linear(self.hidden_dim_linear, 1)
+        )
         self.dropout = tnn.Dropout(p=self.dropout_prob)
+        self.linear = tnn.Linear(self.hidden_dim, 1)
+        self.maxpool = tnn.MaxPool1d(kernel_size=4, stride=2)
 
     def forward(self, input, length):
         batchSize, _, _ = input.size()
         lstm_out, (hn, cn) = self.lstm(input)
         #print("length: ", length)
+
+        hidden = self.maxpool(hn)
         hidden = self.dropout(torch.cat((hn[-2,:,:], hn[-1,:,:]), dim=1))
+        #hidden = torch.cat((hn[-2,:,:], hn[-1,:,:]), dim=1)
+
         out = self.fc(hidden.squeeze(0)).view(batchSize, -1)[:, -1]
+        #out = F.one_hot(out.to(torch.int64))
         #print("output: ", out)
+        #print(out)
         return out
 
-# class loss(tnn.Module):
-#     """
-#     Class for creating a custom loss function, if desired.
-#     You may remove/comment out this class if you are not using it.
-#     """
-#
-#     def __init__(self):
-#         super(loss, self).__init__()
-#
-#     def forward(self, output, target):
-#         pass
+class loss(tnn.Module):
+    """
+    Class for creating a custom loss function, if desired.
+    You may remove/comment out this class if you are not using it.
+    """
 
-lossFunc = tnn.MSELoss()
+    def __init__(self):
+        super(loss, self).__init__()
+        self.mse = tnn.MSELoss()
+
+    def forward(self, output, target):
+        loss = torch.sqrt(self.mse(output,target)+0.00001)
+        return loss
+
+lossFunc = loss()
 
 net = network()
 """
@@ -185,5 +204,6 @@ net = network()
 
 trainValSplit = 0.8
 batchSize = 32
-epochs = 3
+epochs = 15
+#optimiser = toptim.Adam(net.parameters(), lr=0.001)
 optimiser = toptim.Adam(net.parameters(), lr=0.001)
