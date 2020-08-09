@@ -17,6 +17,16 @@ The variable device may be used to refer to the CPU/GPU being used by PyTorch.
 
 You may only use GloVe 6B word vectors as found in the torchtext package.
 """
+# We first broke the rating into a classfication problem; 1,2,3,4,5.
+# For classification, we used a LSTM network to be able to form relationships between
+# different parts of text. However, as we experimented with this LSTM network,
+# we noticed that without enough data, it was hard to reach a high accuracy without
+# too many epochs so that overfitting doesnt occur. However, in order to maintain it's
+# benefits, we added a GRU network alongside and combined the outputs. Preprocessing involved
+# a simple elimination of any non-letter characters. Dropout was chosen at 0.5 to ensure
+# that the network could be able to accurately choose a rating with only a select few nodes.
+# For loss, CrossEntropyLoss was selected due to it's internal LogSoftmax and ability
+# for multiclass selection.
 
 import torch
 import torch.nn as tnn
@@ -25,8 +35,9 @@ from torchtext.vocab import GloVe
 import torch.nn.functional as F
 import re
 import numpy as np
-# import sklearn
+from random import randrange
 
+device = torch.device('cuda:0')
 ###########################################################################
 ### The following determines the processing of input data (review text) ###
 ###########################################################################
@@ -36,58 +47,20 @@ def preprocessing(sample):
     Called after tokenising but before numericalising.
     """
     review = " ".join(sample)
-    #print(review)
     review = review.replace('\'', '')
     review = re.sub(r"</?\w+[^>]*>", '', review)
     review = re.sub(r"[^a-zA-Z']", ' ', review)
     final = review.split()
     final = [i for i in final if len(i) > 1]
-    #print (final)
-
     return final
 
 def postprocessing(batch, vocab):
     """
     Called after numericalisation but before vectorisation.
     """
-    #batch is a list of numbers? representing each unique word
-    #print(batch)
-    #print(batch)
-    # print(vocab.freqs.most_common(200))
-    # temp_words = []
-    # for word in vocab.freqs:
-    #     if (vocab.freqs[word] > 400):
-    #         #print(word, ": ", vocab.freqs[word])
-    #         temp_words.append(word)
-    #
-    # temp_numerical = []
-    # for i in temp_words:
-    #     #print(vocab.stoi[i])
-    #     temp_numerical.append(vocab.stoi[i])
-    #
-    # #print(final_list)
-    # final_list = []
-    # #print(temp_numerical)
-    # #final_list = [i for i in batch if i not in temp_numerical]
-    # for curr in batch:
-    #     temp_list = [i for i in curr if i in temp_numerical]
-    #     final_list.append(temp_list)
-    # print(final_list)
-    # print(batch)
     return batch
 
-stopWords = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself',
-             'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself',
-             'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 'these',
-             'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do',
-             'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while',
-             'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before',
-             'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again',
-             'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each',
-             'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than',
-             'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now', 'd', 'll', 'm', 'o', 're', 've',
-             'y', 'ain', 'aren', 'couldn', 'didn', 'doesn', 'hadn', 'hasn', 'haven', 'isn', 'ma', 'mightn', 'mustn',
-             'needn', 'shan', 'shouldn', 'wasn', 'weren', 'won', 'wouldn', 'got', 'it\'s', 'it.']
+stopWords = {}
 wordVectors = GloVe(name='6B', dim=50)
 
 ###########################################################################
@@ -102,11 +75,8 @@ def convertLabel(datasetLabel):
     to convert them to another representation in this function.
     Consider regression vs classification.
     """
-    #datasetLabel = torch.true_divide(datasetLabel,5)
-    #print("convertLabel: ", datasetLabel)
-    #print(F.one_hot(datasetLabel.to(torch.int64)), datasetLabel)
-    #return F.one_hot(datasetLabel.to(torch.int64))
-    return datasetLabel
+    datasetLabel = datasetLabel - 1
+    return datasetLabel.long()
 
 def convertNetOutput(netOutput):
     """
@@ -116,13 +86,9 @@ def convertNetOutput(netOutput):
     If your network outputs a different representation or any float
     values other than the five mentioned, convert the output here.
     """
-    #print("convertNetOutput: ", netOutput)
-    #print(netOutput)
-    #print(netOutput.flatten())
-    # return torch.sigmoid(netOutput)
-    print(netOutput)
-    netOutput = torch.ceil(netOutput)
-    return netOutput
+    pred = netOutput.argmax(dim=1, keepdim=True)
+    pred = torch.add(pred, 1)
+    return pred.float()
 
 ###########################################################################
 ################### The following determines the model ####################
@@ -138,72 +104,63 @@ class network(tnn.Module):
 
     def __init__(self):
         super(network, self).__init__()
-        self.dropout_prob = 0.5
-        self.input_dim = 50
-        self.hidden_dim = 170
-        self.hidden_dim_linear = 200
+        self.dropout_rate = 0.5
+        self.input_size = 50
+        self.hidden_size = 128
+        self.hidden_size_linear = 200
         self.lstm = tnn.LSTM(
-            input_size=self.input_dim,
-            hidden_size=self.hidden_dim,
+            input_size=self.input_size,
+            hidden_size=self.hidden_size,
             batch_first=True,
             bias=True,
-            dropout=self.dropout_prob,
+            dropout=self.dropout_rate,
             num_layers=4,
             bidirectional=True)
 
-        self.fc = tnn.Sequential(
-            tnn.Linear(self.hidden_dim*2, self.hidden_dim_linear),
-            tnn.BatchNorm1d(self.hidden_dim_linear),
-            tnn.ReLU(inplace=True),
-            tnn.Linear(self.hidden_dim_linear, 1)
+        self.gru = tnn.GRU(
+            input_size=self.input_size,
+            hidden_size=self.hidden_size,
+            batch_first=True,
+            num_layers=2,
+            bidirectional=True,
+            dropout=0.5
         )
-        self.dropout = tnn.Dropout(p=self.dropout_prob)
-        self.linear = tnn.Linear(self.hidden_dim, 1)
-        self.maxpool = tnn.MaxPool1d(kernel_size=4, stride=2)
+
+        self.fc = tnn.Sequential(
+            tnn.Linear(self.hidden_size*2, self.hidden_size_linear),
+            #tnn.Linear(self.hidden_dim*3, self.hidden_dim_linear),
+            tnn.BatchNorm1d(self.hidden_size_linear),
+            tnn.ReLU(inplace=True),
+            tnn.Linear(self.hidden_size_linear, 5)
+        )
+
+        self.dropout = tnn.Dropout(p=self.dropout_rate)
+
 
     def forward(self, input, length):
-        batchSize, _, _ = input.size()
-        lstm_out, (hn, cn) = self.lstm(input)
-        #print("length: ", length)
+        initial_output, hid = self.gru(input)
+        initial_output = initial_output[:, -1, :]
+        packed_output, (hidden, cell) = self.lstm(input)
+        output = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)
+        initial_output = self.dropout(initial_output)
+        output = self.dropout(output)
+        final = initial_output + output
+        final = torch.div(final, 2)
+        output = self.fc(self.dropout(final))
+        return output
 
-        hidden = self.maxpool(hn)
-        hidden = self.dropout(torch.cat((hn[-2,:,:], hn[-1,:,:]), dim=1))
-        #hidden = torch.cat((hn[-2,:,:], hn[-1,:,:]), dim=1)
 
-        out = self.fc(hidden.squeeze(0)).view(batchSize, -1)[:, -1]
-        #out = F.one_hot(out.to(torch.int64))
-        #print("output: ", out)
-        #print(out)
-        return out
-
-class loss(tnn.Module):
-    """
-    Class for creating a custom loss function, if desired.
-    You may remove/comment out this class if you are not using it.
-    """
-
-    def __init__(self):
-        super(loss, self).__init__()
-        self.mse = tnn.MSELoss()
-
-    def forward(self, output, target):
-        loss = torch.sqrt(self.mse(output,target)+0.00001)
-        return loss
-
-lossFunc = loss()
-
+lossFunc = tnn.CrossEntropyLoss()
 net = network()
 """
     Loss function for the model. You may use loss functions found in
     the torch package, or create your own with the loss class above.
 """
-#lossFunc = loss()
 ###########################################################################
 ################ The following determines training options ################
 ###########################################################################
 
-trainValSplit = 0.8
+trainValSplit = 1
 batchSize = 32
-epochs = 15
-#optimiser = toptim.Adam(net.parameters(), lr=0.001)
+epochs = 10
 optimiser = toptim.Adam(net.parameters(), lr=0.001)

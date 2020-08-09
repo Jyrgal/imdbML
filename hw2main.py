@@ -15,6 +15,7 @@ import student
 def main():
     # Use a GPU if available, as it should be faster.
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    #device = torch.device('cpu')
     student.device = device
     print("Using device: {}"
           "\n".format(str(device)))
@@ -105,7 +106,7 @@ def main():
                 # Convert network output to integer values.
                 outputs = student.convertNetOutput(net(inputs, length)).flatten()
 
-                print(labels)
+                #print(labels)
                 #print(outputs)
 
                 for i in range(5):
