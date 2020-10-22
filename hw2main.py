@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""
-hw2main.py
-
-UNSW COMP9444 Neural Networks and Deep Learning
-
-DO NOT MODIFY THIS FILE
-"""
 
 import torch
 from torchtext import data
@@ -46,7 +39,7 @@ def main():
             (train, validate), shuffle=True, batch_size=student.batchSize,
              sort_key=lambda x: len(x.reviewText), sort_within_batch=True)
 
-    # Get model and optimiser from student.
+    # Get model and optimiser
     net = student.net.to(device)
     criterion = student.lossFunc
     optimiser = student.optimiser
